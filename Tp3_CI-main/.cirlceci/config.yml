@@ -1,0 +1,104 @@
+version: 2.1
+jobs:
+  install:
+    docker:
+      - image: circleci/node:12
+    steps:
+      -checkout
+      - save_cache:
+          keys:
+            # Find a cache corresponding to this specific package-lock.json checksum
+            # when this file is changed, this key will fail
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+          paths:
+            - ./node_modules
+          
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+      - run: 
+          name: Install deps using Yarn
+          command: yarn install
+        
+ 
+        
+  lint:
+      docker:
+        - image: circleci/node:12
+      steps:
+        - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+      - run: 
+          name: Check files format
+          command: yarn format:check
+      - run :
+            name: add lint
+            command : yarn lint 
+
+  test:
+    docker:
+      - image: circleci/node:16
+        auth:
+          username: anthonyjhoiro
+          password: $DOCKERHUB_PASSWORD 
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+      - run: 
+          name: Unit Tests
+          command: yarn test
+
+  database:
+    docker: 
+      - image: circleci/node:12
+        auth:
+            username: admin
+            password: $DOCKERHUB_PASSWORD 
+      - image: circleci/postgres:9.6-alpine
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: psdb    
+    steps : 
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+      - run:
+          name: Set up DB
+          command: yarn test:e2e
+        environment:
+          DATABASE_URL: "postgres://psqluer:psqlpassword@localhost:5432/psdb"
+
+  doc :
+    docker : 
+      - image: circleci/node:12
+       auth:
+          username: mydockerhub-user
+          password: $DOCKERHUB_PASSWORD  # context / project UI env-var reference
+
+    steps:
+      -checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+      - run:
+          name: create doc
+          command: |
+            yarn doc:build
+      - store_artifacts:
+          path: /docs
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - install
+      - lint
+      - test
+      - database
+      - doc
+  
